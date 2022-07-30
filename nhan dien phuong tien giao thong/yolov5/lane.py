@@ -5,7 +5,9 @@ import cv2
 from moviepy.editor import VideoFileClip
 import math
 import os
- 
+import threading 
+import detect
+
 # Global parameters
  
 # Gaussian smoothing
@@ -321,14 +323,12 @@ def run(path, filename):
     des = './runs/detect/res/' + filename
     print('SRC: ', src)
     print('DES: ', des)
-    annotate_video(src, des)
-    # if file_extension.lower() in img_file_ext:
-    #     annotate_image(src, des)
-    # else:
     
-    # annotate_video(src, des)
-    # elif file_extension.lower() in vid_file_ext:
-    #     annotate_video(src, des)
+    if file_extension.lower() in img_file_ext:
+        annotate_image(src, des)
+    elif file_extension.lower() in vid_file_ext:  
+        timer = threading.Timer(1.0, annotate_video, (src, des))
+        timer.start() 
     
  
 # End helper functions
