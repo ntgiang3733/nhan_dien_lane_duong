@@ -290,26 +290,27 @@ def annotate_video(input_file, output_file):
  
 # Main script
 if __name__ == '__main__':
-	from optparse import OptionParser
+	annotate_video('5.mp4', './res/5.mp4');
+	# from optparse import OptionParser
  
-	# Configure command line options
-	parser = OptionParser()
-	parser.add_option("-i", "--input_file", dest="input_file",
-					help="Input video/image file")
-	parser.add_option("-o", "--output_file", dest="output_file",
-					help="Output (destination) video/image file")
-	parser.add_option("-I", "--image_only",
-					action="store_true", dest="image_only", default=False,
-					help="Annotate image (defaults to annotating video)")
+	# # Configure command line options
+	# parser = OptionParser()
+	# parser.add_option("-i", "--input_file", dest="input_file",
+	# 				help="Input video/image file")
+	# parser.add_option("-o", "--output_file", dest="output_file",
+	# 				help="Output (destination) video/image file")
+	# parser.add_option("-I", "--image_only",
+	# 				action="store_true", dest="image_only", default=False,
+	# 				help="Annotate image (defaults to annotating video)")
  
-	# Get and parse command line options
-	options, args = parser.parse_args()
+	# # Get and parse command line options
+	# options, args = parser.parse_args()
  
-	input_file = options.input_file
-	output_file = options.output_file
-	image_only = options.image_only
+	# input_file = options.input_file
+	# output_file = options.output_file
+	# image_only = options.image_only
  
-	if image_only:
-		annotate_image(input_file, output_file)
-	else:
-		annotate_video(input_file, output_file)
+	# if image_only:
+	# 	annotate_image(input_file, output_file)
+	# else:
+	# 	annotate_video(input_file, output_file)

@@ -45,6 +45,8 @@ from utils.general import (LOGGER, check_file, check_img_size, check_imshow, che
 from utils.plots import Annotator, colors, save_one_box
 from utils.torch_utils import select_device, time_sync
 
+import lane
+
 
 @torch.no_grad()
 def run(
@@ -208,6 +210,7 @@ def run(
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
+        lane.run('./' + str(save_dir).replace('\\', '/'), str(source).replace('data/images/', ''))
     if update:
         strip_optimizer(weights)  # update model (to fix SourceChangeWarning)
 
@@ -254,3 +257,6 @@ def main(opt):
 if __name__ == "__main__":
     opt = parse_opt()
     main(opt)
+
+
+# python detect.py --weights ./runs/train/exp3/weights/best.pt --img 640 --conf 0.25 --source data/images/1.png
