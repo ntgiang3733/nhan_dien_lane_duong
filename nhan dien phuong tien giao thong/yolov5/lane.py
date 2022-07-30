@@ -5,7 +5,8 @@ import cv2
 from moviepy.editor import VideoFileClip
 import math
 import os
-import threading 
+import threading
+from shapely.geometry import Polygon 
 import detect
 
 # Global parameters
@@ -60,6 +61,8 @@ vid_file_ext = ['.264', '.3g2', '.3gp', '.3gp2', '.3gpp', '.3gpp2', '.3mm', '.3p
 '.wpl', '.wtv', '.wve', '.wvx', '.xej', '.xel', '.xesc', '.xfl', '.xlmv', '.xmv', '.xvid', '.y4m', '.yog', '.yuv', '.zeg',
 '.zm1', '.zm2', '.zm3', '.zmv']
  
+srcYoloResult = ''
+listTransportBoxDef = []
  
 # Helper functions
 def grayscale(img):
@@ -218,10 +221,33 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=10):
 	left_x2 = int(left_x2)
 	
 	# Draw the right and left lines on image
+	print(listTransportBoxDef)
 	if draw_right:
+		print('RIGHT: ', (right_x1, y1), (right_x2, y2))
 		cv2.line(img, (right_x1, y1), (right_x2, y2), color, thickness)
 	if draw_left:
+		print('LEFT: ', (left_x1, y1), (left_x2, y2))
 		cv2.line(img, (left_x1, y1), (left_x2, y2), color, thickness)
+	if draw_right and draw_left:
+		check = False
+		polygon = Polygon([(right_x1, y1), (right_x2, y2), (left_x2, y2), (left_x1, y1)])
+		for x in listTransportBoxDef:
+			other_polygon = Polygon([x[0], x[1], x[2], x[3]])
+			if polygon.intersection(other_polygon).area > 0:
+				check = True
+		if check:
+			position = (10,50)
+			cv2.putText(
+				img, #numpy array on which text is written
+				"Lan lan", #text
+				position, #position at which writing has to start
+				cv2.FONT_HERSHEY_SIMPLEX, #font family
+				1, #font size
+				(209, 80, 0, 255), #font color
+				3)
+			# cv2.putText(img, "Lan lan", (10,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (209, 80, 0, 255), 3)
+		else:
+			cv2.putText(img, "Khong Lan lan", (10,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (209, 80, 0, 255), 3)
 	
 def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
 	"""
@@ -318,9 +344,11 @@ def annotate_video(input_file, output_file):
 	annotated_video.write_videofile(output_file, audio=False)
 
 def run(path, filename):
+    srcYoloResult = path
     file_name, file_extension = os.path.splitext(filename)
     src = path + '/' + filename
     des = './runs/detect/res/' + filename
+    getListTransportBox(src, path + '/labels/' + file_name + '.txt')
     print('SRC: ', src)
     print('DES: ', des)
     
@@ -328,7 +356,33 @@ def run(path, filename):
         annotate_image(src, des)
     elif file_extension.lower() in vid_file_ext:  
         timer = threading.Timer(1.0, annotate_video, (src, des))
-        timer.start() 
+        timer.start()
+
+def yoloToCoco(dimensions, yolo):
+	x_yolo, y_yolo, width_yolo, height_yolo = yolo
+	width_coco = width_yolo * dimensions[1]
+	height_coco = height_yolo * dimensions[0]
+	x_coco = x_yolo*dimensions[1] - (width_coco/2)
+	y_coco = y_yolo*dimensions[0] - (height_coco/2)
+
+	return (
+		(x_coco, y_coco),
+		(x_coco, y_coco + height_coco),
+		(x_coco + width_coco, y_coco + height_coco),
+		(x_coco + width_coco, y_coco)
+	)
+
+def getListTransportBox(srcImage, srcLabel):
+	img = cv2.imread(srcImage)
+	dimensions = (img.shape[0], img.shape[1])
+
+	f = open(srcLabel, "r");
+	listTransportYolo =  str(f.read()).split('\n')
+	# listTransportBoxDef =
+	for x in listTransportYolo:
+		if len(x) > 0:
+			x = x.split()
+			listTransportBoxDef.append(yoloToCoco(dimensions, (float(x[1]), float(x[2]), float(x[3]), float(x[4]))))
     
  
 # End helper functions
