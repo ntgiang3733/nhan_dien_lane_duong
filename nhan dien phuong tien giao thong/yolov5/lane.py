@@ -8,6 +8,8 @@ import os
 import threading
 from shapely.geometry import Polygon 
 import detect
+import glob
+from pathlib import Path
 
 # Global parameters
  
@@ -62,7 +64,6 @@ vid_file_ext = ['.264', '.3g2', '.3gp', '.3gp2', '.3gpp', '.3gpp2', '.3mm', '.3p
 '.zm1', '.zm2', '.zm3', '.zmv']
  
 srcYoloResult = ''
-listTransportBoxDef = []
  
 # Helper functions
 def grayscale(img):
@@ -104,7 +105,7 @@ def region_of_interest(img, vertices):
 	masked_image = cv2.bitwise_and(img, mask)
 	return masked_image
  
-def draw_lines(img, lines, color=[255, 0, 0], thickness=10):
+def draw_lines(img, lines, srcLabel):
 	"""
 	NOTE: this is the function you might want to use as a starting point once you want to 
 	average/extrapolate the line segments you detect to map out the full
@@ -122,6 +123,8 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=10):
 	this function with the weighted_img() function below
 	"""
 	# In case of error, don't draw the line(s)
+	color=[255, 0, 0]
+	thickness=10
 	if lines is None:
 		return
 	if len(lines) == 0:
@@ -221,20 +224,26 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=10):
 	left_x2 = int(left_x2)
 	
 	# Draw the right and left lines on image
-	print(listTransportBoxDef)
 	if draw_right:
-		print('RIGHT: ', (right_x1, y1), (right_x2, y2))
 		cv2.line(img, (right_x1, y1), (right_x2, y2), color, thickness)
 	if draw_left:
-		print('LEFT: ', (left_x1, y1), (left_x2, y2))
 		cv2.line(img, (left_x1, y1), (left_x2, y2), color, thickness)
+	listTransportBoxDef = getListTransportBox(srcLabel)
 	if draw_right and draw_left:
 		check = False
 		polygon = Polygon([(right_x1, y1), (right_x2, y2), (left_x2, y2), (left_x1, y1)])
-		for x in listTransportBoxDef:
-			other_polygon = Polygon([x[0], x[1], x[2], x[3]])
-			if polygon.intersection(other_polygon).area > 0:
-				check = True
+		if polygon.is_valid:
+			for x in listTransportBoxDef:
+				other_polygon = Polygon([x[0], x[1], x[2], x[3]])
+				if other_polygon.is_valid:
+					if polygon.intersection(other_polygon).area > 0:
+						check = True
+				else:
+					print(srcLabel)
+					print('NOT VALID 1: ', x[0], x[1], x[2], x[3])		
+		else:
+			print(srcLabel)
+			print('NOT VALID 2: ', (right_x1, y1), (right_x2, y2), (left_x2, y2), (left_x1, y1))
 		if check:
 			position = (10,50)
 			cv2.putText(
@@ -249,7 +258,7 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=10):
 		else:
 			cv2.putText(img, "Khong Lan lan", (10,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (209, 80, 0, 255), 3)
 	
-def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
+def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap, srcLabel):
 	"""
 	`img` should be the output of a Canny transform.
 		
@@ -257,7 +266,7 @@ def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
 	"""
 	lines = cv2.HoughLinesP(img, rho, theta, threshold, np.array([]), minLineLength=min_line_len, maxLineGap=max_line_gap)
 	line_img = np.zeros((*img.shape, 3), dtype=np.uint8)  # 3-channel RGB image
-	draw_lines(line_img, lines)
+	draw_lines(line_img, lines, srcLabel)
 	return line_img
  
 # Python 3 has support for cool math symbols.
@@ -299,7 +308,7 @@ def filter_colors(image):
  
 	return image2
  
-def annotate_image_array(image_in):
+def annotate_image_array(image_in, srcLabel):
 	""" Given an image Numpy array, return the annotated image as a Numpy array """
 	# Only keep white and yellow pixels in the image, all other pixels become black
 	image = filter_colors(image_in)
@@ -324,7 +333,7 @@ def annotate_image_array(image_in):
 	masked_edges = region_of_interest(edges, vertices)
  
 	# Run Hough on edge detected image
-	line_image = hough_lines(masked_edges, rho, theta, threshold, min_line_length, max_line_gap)
+	line_image = hough_lines(masked_edges, rho, theta, threshold, min_line_length, max_line_gap, srcLabel)
 	
 	# Draw lane lines on the original image
 	initial_image = image_in.astype('uint8')
@@ -332,9 +341,9 @@ def annotate_image_array(image_in):
 	
 	return annotated_image
  
-def annotate_image(input_file, output_file):
+def annotate_image(input_file, output_file, srcLabel):
 	""" Given input_file image, save annotated image to output_file """
-	annotated_image = annotate_image_array(mpimg.imread(input_file))
+	annotated_image = annotate_image_array(mpimg.imread(input_file), srcLabel)
 	plt.imsave(output_file, annotated_image)
  
 def annotate_video(input_file, output_file):
@@ -348,15 +357,59 @@ def run(path, filename):
     file_name, file_extension = os.path.splitext(filename)
     src = path + '/' + filename
     des = './runs/detect/res/' + filename
-    getListTransportBox(src, path + '/labels/' + file_name + '.txt')
+    # getListTransportBox(src, path + '/labels/' + file_name + '.txt')
     print('SRC: ', src)
     print('DES: ', des)
     
     if file_extension.lower() in img_file_ext:
         annotate_image(src, des)
-    elif file_extension.lower() in vid_file_ext:  
-        timer = threading.Timer(1.0, annotate_video, (src, des))
-        timer.start()
+    elif file_extension.lower() in vid_file_ext:
+        timer = threading.Timer(1.0, vidYoloToImg, (path, file_name, file_extension))
+        timer.start() 
+        # vidYoloToImg(path, file_name, file_extension)
+        # timer = threading.Timer(1.0, annotate_video, (src, des))
+        # timer.start()
+
+def vidYoloToImg(src, file_name, file_extension):
+	vidYoloToImgSrc = src + '/vidYoloToImg'
+	laneDetectImgSrc = src + '/laneDetectImg'
+	Path(vidYoloToImgSrc).mkdir(parents=True, exist_ok=True)
+	Path(laneDetectImgSrc).mkdir(parents=True, exist_ok=True)
+	print(src + '/' + file_name + file_extension)
+	vidcap = cv2.VideoCapture(src + '/' + file_name + file_extension)
+	success, image = vidcap.read()
+	count = 0
+	success = True
+	listImg = []
+	while success:
+		imgSrc = vidYoloToImgSrc + '/' + file_name + "_" + str(count+1) + ".jpg"
+		listImg.append(imgSrc)
+		cv2.imwrite(imgSrc, image)
+		success, image = vidcap.read()
+		print(imgSrc)
+		count += 1
+	for x in listImg:
+		annotate_image(x, laneDetectImgSrc + '/' + Path(x).name, src + '/labels/' + Path(x).name.replace('.jpg', '.txt'))
+		print('detect lane img: ', x)
+	imgToVid(laneDetectImgSrc)
+
+def imgToVid(laneDetectImgSrc):
+	img_array = []
+	for filename in glob.glob(laneDetectImgSrc + '/*.jpg'):
+		img = cv2.imread(filename)
+		height, width, layers = img.shape
+		size = (width,height)
+		img_array.append(img)
+
+
+	out = cv2.VideoWriter(laneDetectImgSrc.replace('/laneDetectImg', '') + '/res.mp4',cv2.VideoWriter_fourcc(*'mp4v'), 24, size)
+	
+	for i in range(len(img_array)):
+		print('imgToVid: ', i)
+		out.write(img_array[i])
+	out.release()
+	print('END: ', laneDetectImgSrc)
+
 
 def yoloToCoco(dimensions, yolo):
 	x_yolo, y_yolo, width_yolo, height_yolo = yolo
@@ -372,17 +425,20 @@ def yoloToCoco(dimensions, yolo):
 		(x_coco + width_coco, y_coco)
 	)
 
-def getListTransportBox(srcImage, srcLabel):
+def getListTransportBox(srcLabel):
+	srcImage = srcLabel.replace('/labels/', '/vidYoloToImg/')
+	srcImage = srcImage.replace('.txt', '.jpg')
 	img = cv2.imread(srcImage)
 	dimensions = (img.shape[0], img.shape[1])
 
 	f = open(srcLabel, "r");
 	listTransportYolo =  str(f.read()).split('\n')
-	# listTransportBoxDef =
+	listTransportBoxDef = []
 	for x in listTransportYolo:
 		if len(x) > 0:
 			x = x.split()
 			listTransportBoxDef.append(yoloToCoco(dimensions, (float(x[1]), float(x[2]), float(x[3]), float(x[4]))))
+	return listTransportBoxDef
     
  
 # End helper functions
@@ -390,7 +446,9 @@ def getListTransportBox(srcImage, srcLabel):
  
 # Main script
 if __name__ == '__main__':
-	annotate_video('./runs/detect/exp10/4.mp4', './runs/detect/res/4.mp4');
+	print('main')
+	vidYoloToImg('./runs/detect/exp4', '5', '.mp4')
+	# annotate_video('./runs/detect/exp10/4.mp4', './runs/detect/res/4.mp4');
 	# from optparse import OptionParser
  
 	# # Configure command line options
@@ -409,8 +467,7 @@ if __name__ == '__main__':
 	# input_file = options.input_file
 	# output_file = options.output_file
 	# image_only = options.image_only
- 
 	# if image_only:
-	# 	annotate_image(input_file, output_file)
-	# else:
-	# 	annotate_video(input_file, output_file)
+    # 	annotate_image(input_file, output_file)
+    # else:
+    #     annotate_video(input_file, output_file)
